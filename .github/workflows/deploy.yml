@@ -1,0 +1,42 @@
+# Ship every merge to dev2, where pit-social runs as root from /opt/pit-social.
+# PS_DEPLOY_KEY is a root key restricted on dev2 to one forced command,
+# /usr/local/bin/pit-social-deploy (deploy/pit-social-deploy), which takes a commit
+# already on origin/main, fast-forwards the checkout to it and runs bin/install.sh.
+# Until the secret exists this job does nothing.
+name: Deploy to dev2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev2-pit-social
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HAS_KEY: ${{ secrets.PS_DEPLOY_KEY != '' }}
+    steps:
+      - name: Set up ssh
+        if: env.HAS_KEY == 'true'
+        env:
+          SSH_KEY: ${{ secrets.PS_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+      - name: Deploy
+        if: env.HAS_KEY == 'true'
+        env:
+          SHA: ${{ github.sha }}
+        run: ssh -o BatchMode=yes -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519 root@dev2.profullstack.com "deploy $SHA"
+      - name: Skipped
+        if: env.HAS_KEY != 'true'
+        run: echo "PS_DEPLOY_KEY is not set; not deploying."

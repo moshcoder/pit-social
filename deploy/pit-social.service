@@ -1,0 +1,25 @@
+# /etc/systemd/system/pit-social.service
+# The service behind social.<name>.pit.world: one process for every Moshpit name.
+# Listens on 127.0.0.1:8794 only; pit.world forwards to it.
+[Unit]
+Description=pit-social (social.<name>.pit.world)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/pit-social
+Environment=PORT=8794
+Environment=HOST=127.0.0.1
+Environment=PIT_SOCIAL_DATA_DIR=/root/.local/share/pit-social
+EnvironmentFile=/root/.local/share/pit-social/app.env
+ExecStart=/root/.bun/bin/bun src/server.ts
+Restart=always
+RestartSec=3
+# Seven firehoses at once: give it room, but not the whole box.
+MemoryMax=2G
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

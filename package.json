@@ -1,0 +1,51 @@
+{
+  "name": "pitsocial",
+  "version": "0.1.0",
+  "description": "pit-social: the social side of every Moshpit name at social.<name>.pit.world. Members sign in with pit.world and post; the community follows its hashtags across every public AT Protocol relay and jetstream at once. Web, API, CLI, MCP, AT Protocol feed generator.",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://github.com/moshcoder/pit-social",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moshcoder/pit-social.git"
+  },
+  "bugs": {
+    "url": "https://github.com/moshcoder/pit-social/issues"
+  },
+  "author": "Profullstack, Inc.",
+  "bin": {
+    "pitsocial": "bin/pitsocial"
+  },
+  "files": [
+    "bin/pitsocial",
+    "src",
+    "public",
+    "scripts/smoke-relays.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "scripts": {
+    "start": "bun src/server.ts",
+    "dev": "PIT_SOCIAL_INGEST=off bun --watch src/server.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "smoke": "bun scripts/smoke-relays.ts"
+  },
+  "keywords": ["atproto", "bluesky", "firehose", "jetstream", "relay", "feed-generator", "moshpit", "pit.world", "community", "mcp", "cli"],
+  "dependencies": {
+    "@atcute/car": "^6.1.0",
+    "@atcute/cbor": "^2.3.8",
+    "@atcute/cid": "^2.5.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@profullstack/bridges": "^0.2.0",
+    "hono": "^4.13.13",
+    "zod": "3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "typescript": "^7.0.2"
+  }
+}

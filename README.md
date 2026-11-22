@@ -183,31 +183,25 @@ Every variable, with defaults, is in [`deploy/app.env.example`](deploy/app.env.e
 
 ## Deploy on dev2
 
-The service runs as root from `/opt/pit-social` and listens on `127.0.0.1:8794` only.
-pit.world terminates TLS for `social.<name>.pit.world` and forwards to it, so there is no
-nginx site for this app.
+Since 2026-11-22 the service runs as the unprivileged system user `pitsocial` (no docker,
+no sudo, nologin), never root, and listens on `127.0.0.1:8794` only. pit.world terminates
+TLS for `social.<name>.pit.world` and forwards to it, so there is no nginx site for this app.
 
-```sh
-git clone https://github.com/moshcoder/pit-social /opt/pit-social
-install -d -m 700 /root/.local/share/pit-social
-cp /opt/pit-social/deploy/app.env.example /root/.local/share/pit-social/app.env
-chmod 600 /root/.local/share/pit-social/app.env
-#   set PIT_BRIDGE_KEY (the same key pit.world derives client secrets from) and PIT_SOCIAL_ADMINS
-cd /opt/pit-social && ./bin/install.sh       # OpenInstall: bun install, systemd unit pit-social, health check on /health
-```
+On dev2 the unit `/etc/systemd/system/pit-social.service` is host-managed (written by root,
+sandboxed: `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome`, no capabilities). The
+code in `/opt/pit-social` is owned `root:pitsocial` and read-only to the service; the database
+lives in `/var/lib/pit-social` (`PIT_SOCIAL_DATA_DIR`); secrets stay in
+`/root/.local/share/pit-social/app.env`, read by systemd, not by the app. The unit carries no
+`bin/install.sh` marker on purpose, so `bin/install.sh` refuses to overwrite it.
 
-`bin/install.sh` (settings in `bin/install.conf`) writes and manages its own
-`pit-social.service`. It reads `/root/.local/share/pit-social/app.env`, and the database
-goes to `/root/.local/share/pit-social/pit-social.db`. If you would rather install the
-hand-written unit [`deploy/pit-social.service`](deploy/pit-social.service), copy it to
-`/etc/systemd/system/` and skip `install.sh activate`. `install.sh` refuses to overwrite a
-unit it did not write.
+CI deploys every merge: `.github/workflows/deploy.yml` sends `deploy-pit-social <sha>` with
+`PS_DEPLOY_KEY`, an anthony key forced to `ci-deploy moshcoder/pit-social`, which runs the
+root-owned, host-pinned `/usr/local/bin/pit-social-deploy <sha>` (sha must be on
+`origin/main`; `bun install --ignore-scripts`; restart; health check). Nothing in this repo,
+including `bin/install.sh` and `deploy/pit-social-deploy`, runs as root during a deploy.
 
-To have CI deploy every merge, as family.ancestry does, install
-[`deploy/pit-social-deploy`](deploy/pit-social-deploy) as `/usr/local/bin/pit-social-deploy`.
-Then add a root key restricted to it (`restrict,command="/usr/local/bin/pit-social-deploy"`)
-and set the repo secrets `PS_DEPLOY_KEY` and `PS_KNOWN_HOSTS`. Until those secrets are set,
-`.github/workflows/deploy.yml` does nothing.
+`bin/install.sh` and [`deploy/pit-social.service`](deploy/pit-social.service) remain for
+running pit-social on another box.
 
 Bandwidth: each full relay is about 2.4 MB/s (about 200 GB/day) inbound, and a jetstream
 is about 0.05 MB/s. The default list has five full relays. To cut traffic, set

@@ -1,8 +1,13 @@
-# Ship every merge to dev2, where pit-social runs as root from /opt/pit-social.
-# PS_DEPLOY_KEY is a root key restricted on dev2 to one forced command,
-# /usr/local/bin/pit-social-deploy (deploy/pit-social-deploy), which takes a commit
-# already on origin/main, fast-forwards the checkout to it and runs bin/install.sh.
-# Until the secret exists this job does nothing.
+# Ship every merge to dev2, where pit-social runs from /opt/pit-social as the
+# unprivileged system user pitsocial (never root, since 2026-11-22).
+# PS_DEPLOY_KEY is an anthony key on dev2 (root ssh is off since the 2026-11-20
+# lockdown) forced to `ci-deploy moshcoder/pit-social`, which accepts exactly
+# `deploy-pit-social <40-hex sha>` and runs `sudo -n /usr/local/bin/pit-social-deploy <sha>`.
+# That root-owned, HOST-PINNED script refuses a commit not on origin/main,
+# fast-forwards the checkout, runs `bun install --ignore-scripts`, re-owns the code
+# read-only for pitsocial and restarts the host-managed unit. bin/install.sh and
+# deploy/pit-social-deploy in this repo are NOT run by CI. Until the secret exists
+# this job does nothing.
 name: Deploy to dev2
 
 on:
@@ -17,7 +22,8 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The deploy queues in dev2's deploy-gate (3 slots) behind every other fleet deploy.
+    timeout-minutes: 75
     env:
       HAS_KEY: ${{ secrets.PS_DEPLOY_KEY != '' }}
     steps:
@@ -30,13 +36,23 @@ jobs:
           install -d -m 700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null || { echo "PS_DEPLOY_KEY is not a usable private key"; exit 1; }
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
       - name: Deploy
         if: env.HAS_KEY == 'true'
         env:
           SHA: ${{ github.sha }}
-        run: ssh -o BatchMode=yes -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519 root@dev2.profullstack.com "deploy $SHA"
+        run: ssh -o BatchMode=yes -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519 anthony@dev2.profullstack.com "deploy-pit-social $SHA"
+      - name: Verify pit-social answers through pit.world
+        if: env.HAS_KEY == 'true'
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -m 20 -w '%{http_code}' https://social.my.ip.pit.world/ || true)
+            if [ "$code" = 200 ]; then echo "social.my.ip.pit.world $code"; break; fi
+            echo "attempt $i: $code"; sleep 10
+          done
+          [ "$code" = 200 ] || { echo "pit-social never answered"; exit 1; }
       - name: Skipped
         if: env.HAS_KEY != 'true'
         run: echo "PS_DEPLOY_KEY is not set; not deploying."
